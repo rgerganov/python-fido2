@@ -43,6 +43,7 @@ from enum import IntEnum, unique
 import struct
 import six
 import re
+import os
 
 
 def args(*params):
@@ -539,6 +540,9 @@ class AssertionResponse(bytes):
         )
 
 
+_STRICT_CBOR = 'STRICT_CBOR' in os.environ
+
+
 class CTAP2(object):
     """Implementation of the CTAP2 specification.
 
@@ -589,7 +593,16 @@ class CTAP2(object):
             raise CtapError(status)
         if len(response) == 1:
             return None
-        return parse(response[1:])
+        enc = response[1:]
+        if _STRICT_CBOR:
+            expected = cbor.encode(cbor.decode(enc))
+            if expected != enc:
+                enc_h = b2a_hex(enc)
+                exp_h = b2a_hex(expected)
+                raise ValueError('Non-canonical CBOR from Authenticator.\n'
+                                 'Got: {}\n'.format(enc_h) +
+                                 'Expected: {}'.format(exp_h))
+        return parse(enc)
 
     def make_credential(self, client_data_hash, rp, user, key_params,
                         exclude_list=None, extensions=None, options=None,
